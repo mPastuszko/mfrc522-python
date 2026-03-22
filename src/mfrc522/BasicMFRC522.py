@@ -367,6 +367,89 @@ class BasicMFRC522:
             self.MFRC522.StopCrypto1()
             return None
 
+    def write_block0_no_block(self, data):
+        """
+        Attempt to write raw 16-byte data to block 0 of a Magic MIFARE Gen2 card.
+
+        Block 0 contains the UID, BCC, SAK, ATQA and manufacturer data. This
+        method uses MIFARE_OpenUidBackdoor() to unlock the write and will fail
+        silently on standard (non-magic) cards.
+
+        Args:
+            data (bytes or list): Exactly 16 bytes to write to block 0.
+
+        Returns:
+            tuple: (uid_bytes, written_data) on success, (None, None) on failure.
+                uid_bytes is the first 4 bytes of the written data (the new UID).
+        """
+        if len(data) != 16:
+            raise ValueError("Block 0 data must be exactly 16 bytes.")
+
+        if not self.MFRC522.MIFARE_OpenUidBackdoor():
+            return None, None
+
+        self.MFRC522.WriteTag(0, list(data))
+        return list(data[:4]), list(data)
+
+    def write_block0(self, data):
+        """
+        Write raw 16-byte data to block 0 of a Magic MIFARE Gen2 card, blocking
+        until successful.
+
+        See write_block0_no_block() for details.
+        """
+        uid_bytes, written = self.write_block0_no_block(data)
+        while uid_bytes is None:
+            uid_bytes, written = self.write_block0_no_block(data)
+        return uid_bytes, written
+
+    def write_uid_no_block(self, uid, sak=0x08, atqa=None, manufacturer_data=None):
+        """
+        Attempt to overwrite the UID of a Magic MIFARE Gen2 card.
+
+        Constructs the full 16-byte manufacturer block from the given UID,
+        automatically computing the BCC (XOR of the 4 UID bytes) and using
+        sensible defaults for SAK, ATQA and manufacturer bytes.
+
+        Args:
+            uid (list or bytes): Exactly 4 bytes for the new UID.
+            sak (int): Select AcKnowledge byte. 0x08 = MIFARE Classic 1K (default).
+            atqa (list): 2-byte ATQA value. Defaults to [0x04, 0x00].
+            manufacturer_data (list): 8 bytes appended after ATQA. Defaults to zeros.
+
+        Returns:
+            tuple: (new_uid_int, written_data) on success, (None, None) on failure.
+                new_uid_int is the new UID as an integer (for consistency with other
+                read/write methods).
+        """
+        if len(uid) != 4:
+            raise ValueError("UID must be exactly 4 bytes.")
+        if atqa is None:
+            atqa = [0x04, 0x00]
+        if manufacturer_data is None:
+            manufacturer_data = [0x00] * 8
+
+        bcc = uid[0] ^ uid[1] ^ uid[2] ^ uid[3]
+        block0 = list(uid) + [bcc, sak] + list(atqa) + list(manufacturer_data)
+
+        uid_bytes, written = self.write_block0_no_block(block0)
+        if uid_bytes is None:
+            return None, None
+
+        uid_int = self._uid_to_num(list(uid) + [bcc])
+        return uid_int, written
+
+    def write_uid(self, uid, sak=0x08, atqa=None, manufacturer_data=None):
+        """
+        Overwrite the UID of a Magic MIFARE Gen2 card, blocking until successful.
+
+        See write_uid_no_block() for parameter details.
+        """
+        uid_int, written = self.write_uid_no_block(uid, sak, atqa, manufacturer_data)
+        while uid_int is None:
+            uid_int, written = self.write_uid_no_block(uid, sak, atqa, manufacturer_data)
+        return uid_int, written
+
     def _check_trailer_block(self, trailer_block):
         if (trailer_block+1)%4 == 0:
             return True
