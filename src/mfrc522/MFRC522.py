@@ -653,3 +653,52 @@ class MFRC522:
 
         # Turn on the antenna
         self.AntennaOn()
+
+    def Halt(self):
+        """
+        Sends the HALT command to the PICC and returns the status.
+
+        After a successful HALT the PICC enters the HALT state and will only
+        respond to a WUPA (0x52) command. Returns MI_OK on success.
+        """
+        halt_cmd = [self.PICC_HALT, 0x00]
+        crc = self.CalulateCRC(halt_cmd)
+        halt_cmd.append(crc[0])
+        halt_cmd.append(crc[1])
+        (status, _, _) = self.MFRC522_ToCard(self.PCD_TRANSCEIVE, halt_cmd)
+        return status
+
+    def MIFARE_OpenUidBackdoor(self):
+        """
+        Opens the UID backdoor on Magic MIFARE Gen2 cards, allowing block 0
+        (which contains the UID and manufacturer data) to be overwritten.
+
+        Must be called immediately before WriteTag(0, data). After writing,
+        the card returns to normal operation.
+
+        Returns True on success, False if the card did not respond to the
+        magic commands. Only works on "UID changeable" / Magic Gen2 cards —
+        has no effect on standard MIFARE Classic cards.
+
+        Based on the MIFARE_OpenUidBackdoor() implementation in the
+        miguelbalboa/rfid Arduino library.
+        """
+        # The card must be in HALT state before accepting the magic commands.
+        self.Halt()
+        sleep(0.1)
+
+        # Magic command 1: send 0x40 as a 7-bit frame (not a full byte).
+        self.WriteReg(self.BitFramingReg, 0x07)
+        (status, _, _) = self.MFRC522_ToCard(self.PCD_TRANSCEIVE, [0x40])
+        if status != self.MI_OK:
+            self.logger.error("MIFARE_OpenUidBackdoor: magic command 1 (0x40) failed.")
+            return False
+
+        # Magic command 2: send 0x43 as a full 8-bit frame.
+        self.WriteReg(self.BitFramingReg, 0x00)
+        (status, _, _) = self.MFRC522_ToCard(self.PCD_TRANSCEIVE, [0x43])
+        if status != self.MI_OK:
+            self.logger.error("MIFARE_OpenUidBackdoor: magic command 2 (0x43) failed.")
+            return False
+
+        return True

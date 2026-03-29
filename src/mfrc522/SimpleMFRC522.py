@@ -72,3 +72,36 @@ class SimpleMFRC522:
             id, text_in = self.BasicMFRC522.write_no_block(text, self.TRAILER_BLOCK)
         return id, text_in
 
+    def write_uid(self, uid, sak=0x08, atqa=None, manufacturer_data=None):
+        """
+        Overwrite the UID of a Magic MIFARE Gen2 card.
+
+        Blocks until a card is present and the write succeeds.
+        See BasicMFRC522.write_uid() for parameter details.
+
+        Args:
+            uid (list or bytes): Exactly 4 bytes for the new UID.
+            sak (int): Select AcKnowledge byte. 0x08 = MIFARE Classic 1K (default).
+            atqa (list): 2-byte ATQA value. Defaults to [0x04, 0x00].
+            manufacturer_data (list): 8 bytes appended after ATQA. Defaults to zeros.
+
+        Returns:
+            tuple: (new_uid_int, written_data) on success.
+        """
+        return self.BasicMFRC522.write_uid(uid, sak, atqa, manufacturer_data)
+
+    def write_block0(self, data):
+        """
+        Write raw 16-byte data to block 0 of a Magic MIFARE Gen2 card.
+
+        Blocks until a card is present and the write succeeds.
+        See BasicMFRC522.write_block0() for details.
+
+        Args:
+            data (bytes or list): Exactly 16 bytes to write to block 0.
+
+        Returns:
+            tuple: (uid_bytes, written_data) on success.
+        """
+        return self.BasicMFRC522.write_block0(data)
+
